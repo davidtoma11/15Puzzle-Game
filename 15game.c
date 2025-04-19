@@ -40,10 +40,7 @@ int move_count = 0;                  // Count of player moves
 time_t start_time;                   // Game start time
 time_t last_time_update = 0;         // Last timer update time
 
-/*
- * Initialize the game board with tiles in solved position
- * (Numbers 1-15 with empty space in bottom-right corner)
- */
+// Initialize the game board with tiles in solved position (Numbers 1-15 with empty space in bottom-right corner)
 void initialize_board() {
     int counter = 1;
     for (int y = 0; y < BOARD_SIZE; y++) {
@@ -55,9 +52,8 @@ void initialize_board() {
     }
 }
 
-/*
- * Draw game status information (timer and move count)
- */
+
+// Draw game status information (timer and move count)
 void draw_status_info() {
     // Calculate elapsed time
     time_t now = time(NULL);
@@ -86,9 +82,8 @@ void draw_status_info() {
     }
 }
 
-/*
- * Draw the game header with title, status info, and buttons
- */
+
+// Draw the game header with title, status info, and buttons
 void draw_header() {
     // Draw header background
     XSetForeground(display, gc, dark_mode ? dark_gray.pixel : WhitePixel(display, screen));
@@ -147,58 +142,63 @@ void draw_header() {
                       (FcChar8*)mode_label, strlen(mode_label));
 }
 
-/*
- * Draw the game board with all tiles
- */
-void draw_board() {
-    // Draw board background
-    XSetForeground(display, gc, dark_mode ? dark_gray.pixel : WhitePixel(display, screen));
-    XFillRectangle(display, window, gc, 0, HEADER_HEIGHT,
-                  BOARD_SIZE*(TILE_SIZE+BORDER)+WINDOW_PADDING*2,
-                  BOARD_SIZE*(TILE_SIZE+BORDER)+WINDOW_PADDING*2);
 
-    // Draw each tile
+// Draw a single tile at specified pixel coordinates (not board coordinates) (used for animation between positions)
+void draw_tile_at_pixel(int tile_x, int tile_y, int pixel_x, int pixel_y) {
+    // Skip drawing if the tile is empty (value is 0)
+    if (board[tile_y][tile_x].value == 0) return;
+
+    // Draw the tile background (black for light mode, white for dark mode)
+    XSetForeground(display, gc, dark_mode ? white.pixel : BlackPixel(display, screen));
+    XFillRectangle(display, window, gc, pixel_x, pixel_y, TILE_SIZE, TILE_SIZE);
+
+    // Prepare the tile number as a string
+    char num[3];
+    snprintf(num, sizeof(num), "%d", board[tile_y][tile_x].value);
+
+    // Load the font for drawing text
+    XftFont *font = XftFontOpenName(display, screen, "Arial-22");
+    if (font) {
+        // Measure the size of the text to center it
+        XGlyphInfo extents;
+        XftTextExtentsUtf8(display, font, (FcChar8*)num, strlen(num), &extents);
+
+        int text_x = pixel_x + (TILE_SIZE - extents.width) / 2;
+        int text_y = pixel_y + (TILE_SIZE + font->ascent - font->descent) / 2;
+
+        // Draw the number centered on the tile (color depends on dark mode)
+        XftDrawStringUtf8(xftdraw, dark_mode ? &black : &white, font,
+                          text_x, text_y, (FcChar8*)num, strlen(num));
+    }
+}
+
+
+// Draw the game board with all tiles
+void draw_board() {
+    // Draw the board background (depending on dark mode or light mode)
+    XSetForeground(display, gc, dark_mode ? dark_gray.pixel : WhitePixel(display, screen));
+    XFillRectangle(display, window, gc,
+                  0, HEADER_HEIGHT,
+                  BOARD_SIZE * (TILE_SIZE + BORDER) + WINDOW_PADDING * 2,
+                  BOARD_SIZE * (TILE_SIZE + BORDER) + WINDOW_PADDING * 2);
+
+    // Draw each tile on the board
     for (int y = 0; y < BOARD_SIZE; y++) {
         for (int x = 0; x < BOARD_SIZE; x++) {
-            int pos_x = WINDOW_PADDING + x*(TILE_SIZE+BORDER);
-            int pos_y = HEADER_HEIGHT + WINDOW_PADDING + y*(TILE_SIZE+BORDER);
-
             if (board[y][x].value != 0) {
-                // Draw tile background
-                if (dark_mode) {
-                    XSetForeground(display, gc, white.pixel);  // White tile in dark mode
-                } else {
-                    XSetForeground(display, gc, BlackPixel(display, screen));  // Black tile in light mode
-                }
-                XFillRectangle(display, window, gc, pos_x, pos_y, TILE_SIZE, TILE_SIZE);
+                // Compute screen coordinates for the tile
+                int pos_x = WINDOW_PADDING + x * (TILE_SIZE + BORDER);
+                int pos_y = HEADER_HEIGHT + WINDOW_PADDING + y * (TILE_SIZE + BORDER);
 
-                // Prepare tile number text
-                char num[3];
-                snprintf(num, sizeof(num), "%d", board[y][x].value);
-
-                XftFont *font = XftFontOpenName(display, screen, "Arial-22");
-                if (font) {
-                    XGlyphInfo extents;
-                    XftTextExtentsUtf8(display, font, (FcChar8*)num, strlen(num), &extents);
-
-                    // Center text in tile
-                    int text_x = pos_x + (TILE_SIZE - extents.width) / 2;
-                    int text_y = pos_y + (TILE_SIZE + font->ascent - font->descent) / 2;
-
-                    // Draw number (black in dark mode, white in light mode)
-                    XftDrawStringUtf8(xftdraw, dark_mode ? &black : &white, font,
-                                      text_x, text_y,
-                                      (FcChar8*)num, strlen(num));
-                }
+                // Draw the tile using the helper function
+                draw_tile_at_pixel(x, y, pos_x, pos_y);
             }
         }
     }
 }
 
-/*
- * Check if the current board configuration is solvable
- * (Following 15-puzzle solvability rules)
- */
+
+// Check if the current board configuration is solvable (Following 15-puzzle solvability rules)
 int is_solvable() {
     int inversions = 0;
     int flat_board[BOARD_SIZE * BOARD_SIZE - 1];  // Ignore empty space
@@ -237,10 +237,8 @@ int is_solvable() {
     return (inversions + empty_row) % 2 == 1;
 }
 
-/*
- * Shuffle the board to start a new game
- * Makes random valid moves to ensure solvable configuration
- */
+
+// Shuffle the board to start a new game + makes random valid moves to ensure solvable configuration
 void shuffle_board() {
     srand(time(NULL));
     int empty_x = BOARD_SIZE-1, empty_y = BOARD_SIZE-1;
@@ -277,9 +275,8 @@ void shuffle_board() {
     }
 }
 
-/*
- * Toggle between dark and light color modes
- */
+
+// Toggle between dark and light color modes
 void toggle_dark_mode() {
     dark_mode = !dark_mode;
     draw_header();
@@ -287,9 +284,8 @@ void toggle_dark_mode() {
     XFlush(display);
 }
 
-/*
- * Reset the game to initial state
- */
+
+// Reset the game to initial state
 void reset_game() {
     initialize_board();
     shuffle_board();
@@ -300,17 +296,50 @@ void reset_game() {
     XFlush(display);
 }
 
-/*
- * Attempt to move a tile to the empty space
- * Returns 1 if move was valid, 0 otherwise
- */
+
+// Animate a tile moving from one position to another
+void animate_move(int from_x, int from_y, int to_x, int to_y) {
+    const int ANIMATION_STEPS = 10;  // Number of animation frames
+    const int DELAY_MS = 15;         // Delay between frames
+
+    // Convert board coordinates to pixel coordinates
+    int start_px = WINDOW_PADDING + from_x * (TILE_SIZE + BORDER);
+    int start_py = HEADER_HEIGHT + WINDOW_PADDING + from_y * (TILE_SIZE + BORDER);
+    int end_px = WINDOW_PADDING + to_x * (TILE_SIZE + BORDER);
+    int end_py = HEADER_HEIGHT + WINDOW_PADDING + to_y * (TILE_SIZE + BORDER);
+
+    // Calculate step sizes
+    int step_x = (end_px - start_px) / ANIMATION_STEPS;
+    int step_y = (end_py - start_py) / ANIMATION_STEPS;
+
+    // Animation loop
+    for (int i = 0; i <= ANIMATION_STEPS; i++) {
+        // Clear the area (draw background)
+        XSetForeground(display, gc, dark_mode ? dark_gray.pixel : WhitePixel(display, screen));
+        XFillRectangle(display, window, gc,
+                      start_px, start_py,
+                      TILE_SIZE + abs(step_x) * 2,  // Extra area to cover movement
+                      TILE_SIZE + abs(step_y) * 2);
+
+        // Draw the tile at intermediate position
+        int current_x = start_px + i * step_x;
+        int current_y = start_py + i * step_y;
+        draw_tile_at_pixel(from_x, from_y, current_x, current_y);
+
+        XFlush(display);
+        usleep(DELAY_MS * 1000);
+    }
+}
+
+
+// Attempt to move a tile to the empty space -  Returns 1 if move was valid, 0 otherwise
 int move_tile(int x, int y) {
-    // Check if position is valid
+    // Check if the selected position is within the board boundaries
     if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) {
         return 0; // Invalid move
     }
 
-    // Find empty space position
+    // Find the current position of the empty tile (value 0)
     int empty_x = -1, empty_y = -1;
     for (int i = 0; i < BOARD_SIZE; i++) {
         for (int j = 0; j < BOARD_SIZE; j++) {
@@ -322,22 +351,29 @@ int move_tile(int x, int y) {
         }
     }
 
-    // Check if selected tile is adjacent to empty space
-    if ((abs(x - empty_x) == 1 && y == empty_y) ||
-        (abs(y - empty_y) == 1 && x == empty_x)) {
-        // Swap tile with empty space
+    // Check if the selected tile is adjacent to the empty tile
+    int is_adjacent = (abs(x - empty_x) == 1 && y == empty_y) ||
+                      (abs(y - empty_y) == 1 && x == empty_x);
+
+    if (is_adjacent) {
+        // Animate the tile movement (visual effect)
+        animate_move(x, y, empty_x, empty_y);
+
+        // Update the board data structure by swapping the values
         board[empty_y][empty_x].value = board[y][x].value;
         board[y][x].value = 0;
-        move_count++; // Increment move counter
+
+        // Increment the move counter
+        move_count++;
+
         return 1; // Valid move
     }
 
-    return 0; // Invalid move
+    return 0; // Invalid move (tile not adjacent)
 }
 
-/*
- * Check if the puzzle is solved (all tiles in order)
- */
+
+// Check if the puzzle is solved (all tiles in order)
 int check_win() {
     int counter = 1;
     for (int y = 0; y < BOARD_SIZE; y++) {
@@ -353,9 +389,8 @@ int check_win() {
     return 1;
 }
 
-/*
- * Display win message and reset game after delay
- */
+
+// Display win message and reset game after delay
 void show_win_message() {
     XftFont *font = XftFontOpenName(display, screen, "Arial-20");
     if (font) {
@@ -383,9 +418,8 @@ void show_win_message() {
     reset_game();
 }
 
-/*
- * Main program entry point
- */
+
+// Main program
 int main() {
     // Initialize X11 display connection
     display = XOpenDisplay(NULL);
